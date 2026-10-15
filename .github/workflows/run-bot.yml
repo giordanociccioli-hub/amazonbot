@@ -12,3 +12,5 @@ jobs:
           python-version: "3.11"
       - run: pip install -r requirements.txt
       - run: python amazon_discord_bot.py
+        env:
+          STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}

@@ -1,7 +1,7 @@
 """
 ╔══════════════════════════════════════════════════════════════╗
 ║       🤖  AMAZON RESELLING BOT — Discord Slash Commands      ║
-║  Comandi: /avvia /ferma /stato /controlla /prodotti          ║
+║  Comandi: /avvia /ferma /stato /controlla /prodotti /abbonati║
 ╚══════════════════════════════════════════════════════════════╝
 
 INSTALLAZIONE:
@@ -9,6 +9,9 @@ INSTALLAZIONE:
 
 AVVIO:
     python amazon_discord_bot.py
+
+STRIPE (opzionale, per /abbonati):
+    export STRIPE_SECRET_KEY=sk_test_...   — piani e prezzi in stripe_links.py
 """
 
 import discord
@@ -19,6 +22,7 @@ from bs4 import BeautifulSoup
 import json, os, re, logging, asyncio
 from datetime import datetime
 from statistics import median
+from stripe_links import crea_link_stripe, prezzo_leggibile
 
 # ══════════════════════════════════════════════════════════════
 #  📝  LOGGING
@@ -54,6 +58,7 @@ STATO = {
     "opportunita_trovate": 0,
     "cicli_completati": 0,
     "canale_notifiche": None,   # ID canale dove mandare i report
+    "link_stripe":      None,   # Payment Link Stripe, creati al primo /abbonati
 }
 
 PREZZI_FILE  = "prezzi_salvati.json"
@@ -539,6 +544,33 @@ async def cmd_prodotti(interaction: discord.Interaction):
     await interaction.response.send_message(embed=embed)
 
 
+@tree.command(name="abbonati", description="💳 Link di pagamento Stripe per l'accesso premium")
+async def cmd_abbonati(interaction: discord.Interaction):
+    await interaction.response.defer(thinking=True)
+    if not STATO["link_stripe"]:
+        try:
+            STATO["link_stripe"] = await asyncio.get_event_loop().run_in_executor(
+                None, crea_link_stripe
+            )
+        except Exception as e:
+            log.error(f"Stripe errore: {e}")
+            await interaction.followup.send("⚠️  Link di pagamento non disponibili al momento.")
+            return
+
+    embed = discord.Embed(
+        title="💳  Abbonamento Premium",
+        description="Scegli un piano e completa il pagamento in sicurezza su Stripe:",
+        color=0x635BFF
+    )
+    view = discord.ui.View()
+    for piano in STATO["link_stripe"]:
+        embed.add_field(name=piano["nome"], value=prezzo_leggibile(piano), inline=True)
+        view.add_item(discord.ui.Button(style=discord.ButtonStyle.link,
+                                        label=piano["nome"], url=piano["url"]))
+    embed.set_footer(text="🤖 Amazon Price Bot  •  Pagamenti gestiti da Stripe")
+    await interaction.followup.send(embed=embed, view=view)
+
+
 # ══════════════════════════════════════════════════════════════
 #  🚀  ON READY
 # ══════════════════════════════════════════════════════════════
@@ -572,5 +604,6 @@ if __name__ == "__main__":
     print("    /ferma      ⏹️  Ferma il monitoraggio")
     print("    /stato      📊  Stato e statistiche")
     print("    /controlla  🔍  Controllo immediato")
-    print("    /prodotti   📦  Lista prodotti monitorati\n")
+    print("    /prodotti   📦  Lista prodotti monitorati")
+    print("    /abbonati   💳  Link di pagamento Stripe\n")
     bot.run(CONFIG["DISCORD_BOT_TOKEN"])
